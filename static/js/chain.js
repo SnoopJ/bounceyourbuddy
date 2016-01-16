@@ -99,8 +99,17 @@ function update() {
         //console.log(sig)
         var x = p.position.x;
         var y = p.position.y;
+        if ( game.input.countActivePointers() > 1 && game.time.now-game.lastballtime > BALLSPAWNDELAY) {
+            x = 0;
+            y = 0;
+            game.lastballtime = game.time.now;
+            var vx = 300*(Math.random()-0.5)*2;
+            var vy = 300*(Math.random()-0.5)*2;
+            b = makeABall(x,y,vx,vy);
+        }
+
         if ( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) ) {
-        } else if ( (game.input.keyboard.isDown( Phaser.KeyCode.SHIFT ) || game.input.countActivePointers() > 1 ) && game.time.now-game.lastballtime > BALLSPAWNDELAY ) {
+        } else if ( game.input.keyboard.isDown( Phaser.KeyCode.SHIFT ) && game.time.now-game.lastballtime > BALLSPAWNDELAY ) {
             game.lastballtime = game.time.now;
             var vx = 300*(Math.random()-0.5)*2;
             var vy = 300*(Math.random()-0.5)*2;
@@ -239,6 +248,8 @@ function create() {
         gauge = game.add.sprite(5,75,bmd);
         return gauge;
     })();
+
+    makeSprite(0,game.height-32,game.width,32,'#008800');
 }
 
 function toggleWall(x,y) {
@@ -296,16 +307,20 @@ function makeABall(x,y,vx,vy) {
     return ball;
 }
 
-
-function makeGoal(x,y,width,height,idx,color) {
-    var goal;
+function makeSprite(x,y,width,height,color) {
     var bmd = game.add.bitmapData(width, height);
-     
     bmd.ctx.beginPath();
     bmd.ctx.rect(0, 0, width, height);
     bmd.ctx.fillStyle = color;
     bmd.ctx.fill();
-    goal = game.add.sprite(x,y, bmd);
+    sprite = game.add.sprite(x,y, bmd);
+    return sprite;
+}
+
+function makeGoal(x,y,width,height,idx,color) {
+    var goal;
+     
+    goal = makeSprite(x,y,width,height,color);
     goal.anchor.setTo(0.5, 0.5);
     //game.physics.enable( goal, Phaser.Physics.ARCADE )
     game.physics.p2.enable( goal, false )
