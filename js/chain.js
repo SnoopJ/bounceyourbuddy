@@ -68,8 +68,7 @@ function update() {
                     //dvy = Math.sqrt(Ldv)*50*dvn.y;
                     // multitouch -> repelling the balls
                     if ( game.input.countActivePointers() > 1 ) {
-                        dvx *= -1;
-                        dvy *= -1;
+                        dv.multiply(-1,-1);
                     }
                     //b.body.velocity = b.body.velocity.add(dvx,dvy); 
                     b.body.kick = dv; 
