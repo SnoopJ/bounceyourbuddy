@@ -9,7 +9,7 @@ var BOUNCEDELAY = 100;
 var MAXBOUNCES = 8;
 var BALLSPAWNDELAY = 100;
 var BALLKICKDELAY = 250;
-var BALLKICKDURATION = 30;
+var BALLKICKDURATION = 40;
 var MAXVEL = 1000;
 
 var game = new Phaser.Game(width, height, Phaser.AUTO, 'phaser-example', { preload: preload, create: create, update: update, render: render });
@@ -73,11 +73,11 @@ function update() {
         game.fps = game.add.text(0,0,"FPS:");
     }
 
-    if (game.ptrs instanceof Phaser.Text ) {
-        game.ptrs.text = "Pointers active: " + game.input.countActivePointers();
-    } else {
-        game.ptrs = game.add.text(0,25,"Pointers active:");
-    }
+    //if (game.ptrs instanceof Phaser.Text ) {
+    //    game.ptrs.text = "Pointers active: " + game.input.countActivePointers();
+    //} else {
+    //    game.ptrs = game.add.text(0,25,"Pointers active:");
+    //}
 
     if (game.score instanceof Phaser.Text ) {
         game.score.text = "Score: " + game.pts;
@@ -105,15 +105,17 @@ function update() {
             game.lastballtime = game.time.now;
             var vx = 300*(Math.random()-0.5)*2;
             var vy = 300*(Math.random()-0.5)*2;
-            b = makeABall(x,y,vx,vy);
+            b = makeBall(x,y,vx,vy);
         }
 
         if ( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) ) {
-        } else if ( game.input.keyboard.isDown( Phaser.KeyCode.SHIFT ) && game.time.now-game.lastballtime > BALLSPAWNDELAY ) {
-            game.lastballtime = game.time.now;
-            var vx = 300*(Math.random()-0.5)*2;
-            var vy = 300*(Math.random()-0.5)*2;
-            b = makeABall(x,y,vx,vy);
+        } else if ( game.input.keyboard.isDown( Phaser.KeyCode.SHIFT )  ) {
+            if ( game.time.now-game.lastballtime > BALLSPAWNDELAY ) {
+                game.lastballtime = game.time.now;
+                var vx = 300*(Math.random()-0.5)*2;
+                var vy = 300*(Math.random()-0.5)*2;
+                b = makeBall(x,y,vx,vy);
+            }
         } else {
             balls.map( function(b,i) { 
                 if ( b.collidesWorld() ) { 
@@ -135,43 +137,13 @@ function update() {
                     //}
                     //b.body.velocity = b.body.velocity.add(dvx,dvy); 
                     b.body.kick = dv; 
+                    socket.emit('kick', { 'ballid': b.ballid, 'kick': dv });
                     b.body.lastKick = game.time.now;
                 }
             })
         }
     }
 
-
-    //game.physics.arcade.collide(balls,balls,function ballCollider(b1,b2) {
-    //    if ( game.time.now - game.lastBounce > BOUNCEDELAY && game.bounces < MAXBOUNCES ) {
-    //        game.lastBounce = game.time.now;
-    //        game.bounces++;
-    //        //bounceSnd.play().onStop.add( function() { game.bounces-- } );
-    //    }
-    //});
-    //game.physics.arcade.collide(balls,goal,function goalCollider(b,g) { 
-    //    game.pts++;
-    //    var idx = balls.indexOf(b);
-    //    //console.log("collided ball #" + idx ); 
-    //    if ( !goalSnd.isPlaying ) {
-    //        goalSnd.play();
-    //    }
-    //    b.destroy();
-    //    balls.splice(idx,1);
-    //});
-
-    //for ( var i = 0; i < game.grid.length; i++ ) {
-    //    walls = game.grid[i];
-    //    game.physics.arcade.collide(balls,walls);
-    //}
-
-    //game.physics.arcade.collide(balls,balls,function ballCollider(b1,b2) {
-    //    if ( game.time.now - game.lastBounce > BOUNCEDELAY && game.bounces < MAXBOUNCES ) {
-    //        game.lastBounce = game.time.now;
-    //        game.bounces++;
-    //        //bounceSnd.play().onStop.add( function() { game.bounces-- } );
-    //    }
-    //});
     for ( var i=0; i < balls.length; i++ ) {
         b = balls[i];
         if ( game.time.now-b.body.lastKick < BALLKICKDURATION ) {
@@ -203,9 +175,7 @@ function create() {
 
     //game.physics.startSystem(Phaser.Physics.ARCADE);
     game.physics.startSystem(Phaser.Physics.P2JS);
-    game.overridephysics = false;
     game.physics.update = function() { 
-        getPhysics(); 
         game.physics.p2.update() 
     };
     //game.physics.arcade.gravity.set(0,1200);
@@ -218,10 +188,10 @@ function create() {
     goalR = makeGoal(game.width-50/2,game.height-game.height/3/2-32,50,game.height/3,0,'#ff0000');
     goalL = makeGoal(50/2,game.height-game.height/3/2-32,50,game.height/3,1,'#0000ff');
 
-    var numballs = 1;
-    for ( var i=0; i < numballs; i++ ) {
-        b = makeABall(game.width*Math.random(),game.height*Math.random(),1000*(Math.random()-0.5)*2,1000*(Math.random()-0.5)*2);
-    }
+    //var numballs = 1;
+    //for ( var i=0; i < numballs; i++ ) {
+    //    b = makeBall(game.width/2,game.height/2,0*1000*(Math.random()-0.5)*2,0*1000*(Math.random()-0.5)*2);
+    //}
     
     game.grid = Array.apply(null,Array( Math.floor(game.width/32) ))
     game.grid = game.grid.map( function(x,i) { return Array( Math.floor(game.height/32) ) } )
@@ -236,13 +206,13 @@ function create() {
     game.canvas.style.setProperty("left",""+margin+"px");
     game.canvas.style.setProperty("top",""+margin+"px");
 
-    game.input.onDown.add( function(s) {
-        var x = s.position.x;
-        var y = s.position.y;
-        if( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) && y < game.height-32 ) {
-            toggleWall(x,y);
-        }
-    })
+    //game.input.onDown.add( function(s) {
+    //    var x = s.position.x;
+    //    var y = s.position.y;
+    //    if( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) && y < game.height-32 ) {
+    //        toggleWall(x,y);
+    //    }
+    //})
 
     game.powergauge = (function() {
         var bmd = game.add.bitmapData(200, 25);
@@ -256,20 +226,39 @@ function create() {
 
     makeSprite(0,game.height-32,game.width,32,'#008800');
 
+    socket.on('spawnBall', function(msg) {
+        makeBall(msg.x,msg.y,msg.vx,msg.vy,msg.id)
+    })
+    
+    socket.emit('ready');
+
 }
 
 var socket = io();
-socket.on('time', function(data) {
-    console.log("time received!");
-    //console.log(data);
+socket.on('goal', function(data) {
+    console.log("GOAL GOAL GOAL GOAAAAAAAAL");
+    console.log(data);
+    console.log("Scored against goal " + data.scoredon);
+    if (data.scoredon == "left") {
+        game.pts[1]++;
+    } else if (data.scoredon == "right") {
+        game.pts[0]++;
+    } else {
+        console.log( "uh...I dunno who scored that one." )
+    }
+    balls.map( function(b,i) {
+        if ( b.ballid == data.ballid ) {
+            balls.splice( balls.indexOf(b), 1 );
+            b.body.onEndContact.removeAll();
+            b.destroy(true);
+        }
+    });
 });
 
 socket.on('update',function(res) { 
-    console.log(res) 
+    //console.log(res) 
     updatePhysics(res);
 });
-
-socket.emit('requestUpdate');
 
 function toggleWall(x,y) {
         obj = game.grid[ Math.floor(x/32) ][ Math.floor(y/32) ]
@@ -285,7 +274,18 @@ function toggleWall(x,y) {
         }
 }
 
-function makeABall(x,y,vx,vy) {
+
+function makeBall(x,y,vx,vy,id) {
+//    socket.emit('spawnBall',{
+//        id: ballid,
+//        x:x/20,
+//        y:y/20, 
+//        //x:(530-300)/20,
+//        //y:300/20, 
+//        vx:vx/20, 
+//        vy:vy/20
+//    });
+
     var ball = game.add.sprite(x, y, 'ball', 0);
     ball.bringToTop();
 
@@ -293,19 +293,15 @@ function makeABall(x,y,vx,vy) {
     
     ball.width = 16
     ball.height = 16
-
-    // ARCADE PHYSICS
-    //game.physics.enable(ball, Phaser.Physics.ARCADE);
-    //ball.body.collideWorldBounds = true;
-    //ball.body.gravity.set(0,800);
-    //ball.body.bounce.setTo(1.0,0.75);
-    //ball.body.drag.setTo(0.9,0.3);
-    // ball.body.velocity.setTo(vx,vy);
+    ball.ballid = id;
 
     // P2 PHYSICS
     game.physics.p2.enable(ball, false);
-    game.physics.p2.gravity.y = 800;
+    //game.physics.p2.gravity.y = 800;
     game.physics.p2.restitution = 1;
+    
+    ball.body.mass = 1;
+    //ball.body.collideWorldBounds = false; // disable world collision
     ball.body.velocity.x = vx;
     ball.body.velocity.y = vy;
     ball.body.onEndContact.add( function() { 
@@ -348,40 +344,29 @@ function makeGoal(x,y,width,height,idx,color) {
     goal.body.data.shapes[0].sensor = true
     goal.body.onBeginContact.add( function(s) { 
         ball = s.sprite;
-        balls.splice( balls.indexOf(s.sprite), 1 )
+        //balls.splice( balls.indexOf(s.sprite), 1 )
         ball.body.onEndContact.removeAll();
-        ball.destroy();
+        //ball.destroy();
         if ( !goalSnd.isPlaying ) {
             goalSnd.play();
         }
-        game.pts[idx]++;    
+        //game.pts[idx]++;    
         //console.log( balls.indexOf(s.sprite) ) 
     })
     return goal;
 }
 
-function getPhysics() {
-    if (game.overridephysics) {
-        balls.map( function(b,i) {
-            // some kind of conversion factor here... doublecheck when server/client is go
-            b.body.data.position[0] = -game.width/2 /20; 
-            b.body.data.position[1] = -game.height/2 /20;
-            b.body.setZeroVelocity();
-            b.body.setZeroRotation();
-            //b.body.clearCollision();
-            b.body.data.shapes[0].collisionResponse = false;
-        })
-    } else {
-        balls.map( function(b,i) {
-            b.body.data.shapes[0].collisionResponse = true;
-        })
-    }
-}
-
 function updatePhysics(update) {
         balls.map( function(b,i) {
-            b.body.data.position[0] = -update.x/20; 
-            b.body.data.position[1] = -update.y/20;
-            b.body.setZeroVelocity();
+            if ( b.ballid != update.id ) {
+                return false;
+            }
+//            console.log(update);
+            b.body.x = update.update.x*20; 
+            b.body.y = game.height-32-update.update.y*20; 
+            //b.body.data.position[1] = (game.height - 32)/-20 - update.y/20;
+            //console.log(b.body.data.position[1]);
+            b.body.velocity.x = update.update.vx*20;
+            b.body.velocity.y = -update.update.vy*20;
         })
 }
