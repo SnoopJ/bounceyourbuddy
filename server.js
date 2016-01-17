@@ -17,152 +17,172 @@ var port = process.env.PORT || 80;
 
 app.listen(port);
 
-//// Send index.html to all requests
-//var app = http.createServer(function (req, res) {
-//  //console.log(req.url);
-//  fs.readFile(__dirname + req.url, function (err,data) {
-//    if (err) {
-//      res.writeHead(404);
-//      res.end(JSON.stringify(err));
-//      return;
-//    }
-//    res.writeHead(200);
-//    res.end(data);
-//  });
-//}).listen(port);
-
 // Socket.io server listens to our app
 var io = require('socket.io').listen(app);
 
 p2.restitution = 1.0;
 
-var world = new p2.World({
+var world;
+var sendPhysicsUpdate;
+var spawnBall;
+var balls;
+var goalL;
+var goalR;
+var physicsLoop;
+
+world = new p2.World({
    gravity: [0,-800/20] 
 });
 
-var worldMaterial = new p2.Material();
-world.defaultMaterial = worldMaterial;
-
-var ballMaterial = new p2.Material();
-var ballWorldContact = new p2.ContactMaterial(worldMaterial, ballMaterial, { restitution: 1.0 });
-
-world.addContactMaterial( ballWorldContact );
-
-var balls = [];
-var spawnBall = function(x,y,vx,vy,id) {
-    var ball = new p2.Body({
-        mass: 1,
-        angle: 0,
-        position:[x,y],
-        velocity: [vx, vy],
-        angularVelocity: 0,
-        //position:[(530-300)/20,300/20]
+var resetWorld = function () {
+    clearInterval(physicsLoop);
+    //world.clear();
+    world.bodies.map( function(b,i) {
+        world.removeBody(b);
     });
-    ball.addShape( new p2.Box({ width: 16/20, height: 16/20, material: ballMaterial }) );
-    ball.ballid = id;
-    world.addBody(ball);
-    balls.push(ball);
-    return ball;
+    setUpWorld();
+    setTimeout( function() {
+        b = spawnBall( (530-300)/20,100/20, -5, 0, curid );
+        //console.log(b.ballid);
+        io.emit('spawnBall', { x: (530-300), y: 100, vx: -5/20, vy: 0, id:curid });
+        curid++;
+    }, 3000);
 }
 
-var goalLShape = new p2.Box( { width: 50/20, height: 100/20, material: worldMaterial } );
-var goalL = new p2.Body({
-    mass:0,
-    sensor: true,
-    goalId: 0,
-    position:[(530-50)/20,0]
-});
-goalL.addShape(goalLShape);
-world.addBody(goalL);
+var setUpWorld = function () {
 
-var goalRShape = new p2.Box( { width: 50/20, height: 100/20, material: worldMaterial } );
-var goalR = new p2.Body({
-    mass:0,
-    sensor: true,
-    goalId: 1,
-    position:[0,0]
-});
-goalR.addShape(goalRShape);
-world.addBody(goalR);
+    var worldMaterial = new p2.Material();
+    world.defaultMaterial = worldMaterial;
 
-world.on( "beginContact", function(evt) { 
-    if ( evt.bodyA === goalL || evt.bodyA === goalR ) {
-        console.log("GOOOOOAAAAAAAAAAAAALLLL"); 
-        scoredon = "nobody?!";
-        if ( evt.bodyA === goalR ) { scoredon = "left" }
-        if ( evt.bodyA === goalL ) { scoredon = "right" }
-        console.log( "Against " + scoredon ); 
-        io.emit('goal', { scoredon: scoredon, ballid: evt.bodyB.ballid } );
-        balls.splice( balls.indexOf(evt.bodyB), 1 );
-        world.removeBody(evt.bodyB);
-        delete(evt.bodyB);
-    } if ( evt.bodyB === goalL || evt.bodyB === goalR ) {
-        console.log("GOOOOOAAAAAAAAAAAAALLLL"); 
-        scoredon = "nobody?!";
-        if ( evt.bodyB === goalR ) { scoredon = "left" }
-        if ( evt.bodyB === goalL ) { scoredon = "right" }
-        console.log( "Against " + scoredon ); 
-        io.emit('goal', { scoredon: scoredon, ballid: evt.bodyA.ballid } );
-        balls.splice( balls.indexOf(evt.bodyA), 1 );
-        world.removeBody(evt.bodyA);
-        delete(evt.bodyA);
-    }
-    //console.log(evt.bodyA);
-    //console.log(evt.bodyB);
-})
+    var ballMaterial = new p2.Material();
+    var ballWorldContact = new p2.ContactMaterial(worldMaterial, ballMaterial, { restitution: 1.0 });
 
-var groundShape = new p2.Plane( { material: worldMaterial } );
-var ground = new p2.Body({
-    mass:0,
-    position:[0,32/20]
-});
-ground.addShape(groundShape);
-world.addBody(ground);
+    world.addContactMaterial( ballWorldContact );
 
-var ceilingShape = new p2.Box( { width:530/20, height:4, material: worldMaterial } );
-var ceiling = new p2.Body({
-    mass:0,
-    type: p2.Body.STATIC,
-    position:[0,300/20]
-});
-//ceilingShape.collisionResponse = false;
-ceiling.addShape(ceilingShape);
-world.addBody(ceiling);
-
-var wallShape = new p2.Box( { width:5, height:300/2, material: worldMaterial } );
-var wall = new p2.Body({
-    mass: 0,
-    type: p2.Body.STATIC,
-    position:[-4,0],
-});
-wall.addShape(wallShape);
-world.addBody(wall);
-
-var wallShape2 = new p2.Box( { width:5, height:300/2, material: worldMaterial } );
-var wall2 = new p2.Body({
-    mass: 0,
-    type: p2.Body.STATIC,
-    position:[530/20+4,0],
-});
-wall2.addShape(wallShape2);
-world.addBody(wall2);
-
-var MAXSPEED = 50;
-var sendPhysicsUpdate = function (socket) {
-    balls.map( function(ball,i) {
-        // poor man's clamp
-        //ball.velocity[0] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
-        //ball.velocity[1] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
-        io.emit('update', { id: ball.ballid,
-            update: {
-                x: ball.position[0], 
-                y: ball.position[1],
-                vx: ball.velocity[0],
-                vy: ball.velocity[1]
-            }
+    balls = [];
+    spawnBall = function(x,y,vx,vy,id) {
+        var ball = new p2.Body({
+            mass: 1,
+            angle: 0,
+            position:[x,y],
+            velocity: [vx, vy],
+            angularVelocity: 0,
+            //position:[(530-300)/20,300/20]
         });
+        ball.addShape( new p2.Box({ width: 16/20, height: 16/20, material: ballMaterial }) );
+        ball.ballid = id;
+        world.addBody(ball);
+        balls.push(ball);
+        return ball;
+    }
+
+    var goalLShape = new p2.Box( { width: 50/20, height: 100/20, material: worldMaterial } );
+    goalL = new p2.Body({
+        mass:0,
+        sensor: true,
+        goalId: 0,
+        position:[(530-50)/20,0]
+    });
+    goalL.addShape(goalLShape);
+    world.addBody(goalL);
+
+    var goalRShape = new p2.Box( { width: 50/20, height: 100/20, material: worldMaterial } );
+    goalR = new p2.Body({
+        mass:0,
+        sensor: true,
+        goalId: 1,
+        position:[0,0]
+    });
+    goalR.addShape(goalRShape);
+    world.addBody(goalR);
+
+    world.on( "beginContact", function(evt) { 
+        if ( evt.bodyA === goalL || evt.bodyA === goalR ) {
+            console.log("GOOOOOAAAAAAAAAAAAALLLL"); 
+            scoredon = "nobody?!";
+            if ( evt.bodyA === goalR ) { scoredon = "left" }
+            if ( evt.bodyA === goalL ) { scoredon = "right" }
+            console.log( "Against " + scoredon ); 
+            io.emit('goal', { scoredon: scoredon, ballid: evt.bodyB.ballid } );
+            resetWorld();
+            //balls.splice( balls.indexOf(evt.bodyB), 1 );
+            //world.removeBody(evt.bodyB);
+            //delete(evt.bodyB);
+        } if ( evt.bodyB === goalL || evt.bodyB === goalR ) {
+            console.log("GOOOOOAAAAAAAAAAAAALLLL"); 
+            scoredon = "nobody?!";
+            if ( evt.bodyB === goalR ) { scoredon = "left" }
+            if ( evt.bodyB === goalL ) { scoredon = "right" }
+            console.log( "Against " + scoredon ); 
+            io.emit('goal', { scoredon: scoredon, ballid: evt.bodyA.ballid } );
+            resetWorld();
+            //balls.splice( balls.indexOf(evt.bodyA), 1 );
+            //world.removeBody(evt.bodyA);
+            //delete(evt.bodyA);
+        }
+        //console.log(evt.bodyA);
+        //console.log(evt.bodyB);
     })
-//    console.log(balls)
+
+    var groundShape = new p2.Plane( { material: worldMaterial } );
+    var ground = new p2.Body({
+        mass:0,
+        position:[0,32/20]
+    });
+    ground.addShape(groundShape);
+    world.addBody(ground);
+
+    var ceilingShape = new p2.Box( { width:530/20, height:4, material: worldMaterial } );
+    var ceiling = new p2.Body({
+        mass:0,
+        type: p2.Body.STATIC,
+        position:[0,300/20]
+    });
+    //ceilingShape.collisionResponse = false;
+    ceiling.addShape(ceilingShape);
+    world.addBody(ceiling);
+
+    var wallShape = new p2.Box( { width:5, height:300/2, material: worldMaterial } );
+    var wall = new p2.Body({
+        mass: 0,
+        type: p2.Body.STATIC,
+        position:[-4,0],
+    });
+    wall.addShape(wallShape);
+    world.addBody(wall);
+
+    var wallShape2 = new p2.Box( { width:5, height:300/2, material: worldMaterial } );
+    var wall2 = new p2.Body({
+        mass: 0,
+        type: p2.Body.STATIC,
+        position:[530/20+4,0],
+    });
+    wall2.addShape(wallShape2);
+    world.addBody(wall2);
+
+    sendPhysicsUpdate = function (socket) {
+        balls.map( function(ball,i) {
+            // poor man's clamp
+            //ball.velocity[0] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
+            //ball.velocity[1] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
+            io.emit('update', { id: ball.ballid,
+                update: {
+                    x: ball.position[0], 
+                    y: ball.position[1],
+                    vx: ball.velocity[0],
+                    vy: ball.velocity[1]
+                }
+            });
+        })
+    //    console.log(balls)
+    }
+
+    var timeStep = 1/40;
+    physicsLoop = setInterval( function() { 
+        world.step(timeStep); 
+        sendPhysicsUpdate(); 
+        //console.log(ball.position);
+    }, 1000*timeStep );
 }
 
 var curid = 0;
@@ -180,16 +200,14 @@ io.on('connection', function(socket){
             console.log("waiting for one more...");
             console.log(clientsready);
             return; 
+        } else if ( clientsready > 1 ) { // two people already playing
+            console.log("Sorry, buddy, we're full...")
+            return;
         }
-        var timeStep = 1/40;
-        setInterval( function() { 
-            world.step(timeStep); 
-            sendPhysicsUpdate(); 
-            //console.log(ball.position);
-        }, 1000*timeStep );
+        setUpWorld();
 
         b = spawnBall( (530-300)/20,100/20, -5, 0, curid );
-        console.log(b.ballid);
+        //console.log(b.ballid);
         io.emit('spawnBall', { x: (530-300), y: 100, vx: -5/20, vy: 0, id:curid });
         curid++;
         socket.on('kick', function(msg){
