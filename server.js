@@ -35,17 +35,26 @@ world = new p2.World({
 });
 
 var resetWorld = function () {
+    io.emit( 'reset' );
     clearInterval(physicsLoop);
     //world.clear();
     world.bodies.map( function(b,i) {
         world.removeBody(b);
     });
+    console.log("set up another world");
     setUpWorld();
+    console.log("run new world");
     setTimeout( function() {
         b = spawnBall( (530-300)/20,100/20, -5, 0, curid );
         //console.log(b.ballid);
         io.emit('spawnBall', { x: (530-300), y: 100, vx: -5/20, vy: 0, id:curid });
         curid++;
+        var timeStep = 1/40;
+        physicsLoop = setInterval( function() { 
+            world.step(timeStep); 
+            sendPhysicsUpdate(); 
+            //console.log(ball.position);
+        }, 1000*timeStep );
     }, 3000);
 }
 
@@ -100,9 +109,18 @@ var setUpWorld = function () {
         if ( evt.bodyA === goalL || evt.bodyA === goalR ) {
             console.log("GOOOOOAAAAAAAAAAAAALLLL"); 
             scoredon = "nobody?!";
-            if ( evt.bodyA === goalR ) { scoredon = "left" }
-            if ( evt.bodyA === goalL ) { scoredon = "right" }
+            if ( evt.bodyA === goalR ) { 
+                scoredon = "left"; 
+                clients.right.money += Math.floor(10*(world.time-lastGoal)/(numPoints+1));
+            } else if ( evt.bodyA === goalL ) { 
+                scoredon = "right" 
+                clients.left.money += Math.floor(10*(world.time-lastGoal)/(numPoints+1));
+            }
+            io.emit('money', clients);
+            numPoints++;
+            lastGoal = world.time;
             console.log( "Against " + scoredon ); 
+            console.log(clients);
             io.emit('goal', { scoredon: scoredon, ballid: evt.bodyB.ballid } );
             resetWorld();
             //balls.splice( balls.indexOf(evt.bodyB), 1 );
@@ -160,11 +178,9 @@ var setUpWorld = function () {
     wall2.addShape(wallShape2);
     world.addBody(wall2);
 
-    sendPhysicsUpdate = function (socket) {
+
+    sendPhysicsUpdate = function () {
         balls.map( function(ball,i) {
-            // poor man's clamp
-            //ball.velocity[0] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
-            //ball.velocity[1] = Math.max( -MAXSPEED , Math.min( ball.velocity[0], MAXSPEED ) );
             io.emit('update', { id: ball.ballid,
                 update: {
                     x: ball.position[0], 
@@ -173,44 +189,34 @@ var setUpWorld = function () {
                     vy: ball.velocity[1]
                 }
             });
-        })
-    //    console.log(balls)
+        });
     }
-
-    var timeStep = 1/40;
-    physicsLoop = setInterval( function() { 
-        world.step(timeStep); 
-        sendPhysicsUpdate(); 
-        //console.log(ball.position);
-    }, 1000*timeStep );
 }
 
+
 var curid = 0;
-var clientsready = 0;
+var lastGoal = 0;
+var numPoints = 0;
+var clients = {left: { id: null, money: 0 }, right: { id: null, money: 0 } };
 io.on('connection', function(socket){
     balls = [];
-    console.log('a user connected');
+    console.log('a user connected (id: ' + socket.id +' )');
     socket.on('disconnect', function(){
+        if ( clients.left.id == socket.id ) {
+            clients.left.id = null;
+        } else if ( clients.right.id == socket.id ) {
+            clients.right.id = null;
+        }
         console.log('user disconnected');
     });
 
-    socket.on('ready', function(){
-        if ( clientsready < 1 ) { 
-            clientsready++; 
-            console.log("waiting for one more...");
-            console.log(clientsready);
-            return; 
-        } else if ( clientsready > 1 ) { // two people already playing
-            console.log("Sorry, buddy, we're full...")
-            return;
-        }
-        setUpWorld();
 
-        b = spawnBall( (530-300)/20,100/20, -5, 0, curid );
-        //console.log(b.ballid);
-        io.emit('spawnBall', { x: (530-300), y: 100, vx: -5/20, vy: 0, id:curid });
-        curid++;
+    socket.on('ready', function(){
         socket.on('kick', function(msg){
+            //if ( socket.id != clients.left.id && socket.id != clients.right.id ) {
+            //    // you ain't playin, buddy
+            //    return;
+            //}
             console.log("We're supposed to kick a ball");
             balls.map( function(ball,i) {
                 console.log("Testing ball with id " + ball.ballid + " against " + msg.ballid);
@@ -221,6 +227,34 @@ io.on('connection', function(socket){
                 }
             });
         });
+        if ( !clients.left.id ) { 
+            clients.left = { id: socket.id, money: 0 };
+            socket.emit('left');
+            console.log("waiting for one more...");
+            console.log(clients);
+        } else if ( !clients.right.id ) {
+            clients.right = { id: socket.id, money: 0 };
+            socket.emit('right');
+            console.log("lets get it on!");
+            console.log(clients);
+            var timeStep = 1/40;
+            physicsLoop = setInterval( function() { 
+                world.step(timeStep); 
+                sendPhysicsUpdate(); 
+                //console.log(ball.position);
+            }, 1000*timeStep );
+        } else { // two people already playing
+            console.log("Sorry, buddy, we're full...")
+            return;
+        }
+        
+        if ( clients.left.id && clients.right.id ) {
+            setUpWorld();
+            b = spawnBall( (650)/2/20,100/20, -5, 0, curid );
+            io.emit('spawnBall', { x: (650)/2, y: 100, vx: 0, vy: 0, id:curid });
+            curid++;
+            lastGoal = world.time;
+        }
     });
 
 });

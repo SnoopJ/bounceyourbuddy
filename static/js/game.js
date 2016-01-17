@@ -4,7 +4,7 @@ var margin = 10;
 var height = 360 - margin*2;
 var width = 550 - margin*2;
 
-var CLICKPOWERRATE = 100;
+var CLICKPOWERRATE = 1/10;
 var BOUNCEDELAY = 100;
 var MAXBOUNCES = 8;
 var BALLSPAWNDELAY = 100;
@@ -53,6 +53,7 @@ function preload() {
 }
 
 var bounces=[];
+var clients;
 function update() {
 
     game.clickpower = Math.min(100,game.clickpower + CLICKPOWERRATE);
@@ -67,10 +68,18 @@ function update() {
     //game.camera.x += 0.09*(centerx-game.camera.position.x);
     //game.camera.y += 0.09*(centery-game.camera.position.y);
 
-    if (game.fps instanceof Phaser.Text ) {
-        game.fps.text = "FPS: " + game.time.fps;
+    //if (game.fps instanceof Phaser.Text ) {
+    //    game.fps.text = "FPS: " + game.time.fps;
+    //} else {
+    //    game.fps = game.add.text(0,0,"FPS:");
+    //}
+
+    if (game.dbg instanceof Phaser.Text ) {
+        game.dbg.text = "$(YOU): " + game.money[0] + 
+            " \n$(OPPONENT): " + game.money[1] +
+            " \nScore: " + game.pts;
     } else {
-        game.fps = game.add.text(0,0,"FPS:");
+        game.dbg = game.add.text(0,0,"");
     }
 
     //if (game.ptrs instanceof Phaser.Text ) {
@@ -79,11 +88,6 @@ function update() {
     //    game.ptrs = game.add.text(0,25,"Pointers active:");
     //}
 
-    if (game.score instanceof Phaser.Text ) {
-        game.score.text = "Score: " + game.pts;
-    } else {
-        game.score = game.add.text(0,50,"Score:");
-    }
 
     game.powergauge.width = game.clickpower / 2;
     game.powergauge.tint = game.clickpower > 20 ? 0x00ff00 : 0xff0000;
@@ -99,14 +103,14 @@ function update() {
         //console.log(sig)
         var x = p.position.x;
         var y = p.position.y;
-        if ( game.input.countActivePointers() > 1 && game.time.now-game.lastballtime > BALLSPAWNDELAY) {
-            x = game.width/2;
-            y = game.height;
-            game.lastballtime = game.time.now;
-            var vx = 300*(Math.random()-0.5)*2;
-            var vy = 300*(Math.random()-0.5)*2;
-            b = makeBall(x,y,vx,vy);
-        }
+        //if ( game.input.countActivePointers() > 1 && game.time.now-game.lastballtime > BALLSPAWNDELAY) {
+        //    x = game.width/2;
+        //    y = game.height;
+        //    game.lastballtime = game.time.now;
+        //    var vx = 300*(Math.random()-0.5)*2;
+        //    var vy = 300*(Math.random()-0.5)*2;
+        //    b = makeBall(x,y,vx,vy);
+        //}
 
         if ( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) ) {
         } else if ( game.input.keyboard.isDown( Phaser.KeyCode.SHIFT )  ) {
@@ -122,7 +126,7 @@ function update() {
                     bounceSnd.play() 
                 }
                 if ( game.clickpower > 5 && game.time.now - b.body.lastKick > BALLKICKDELAY  ) {
-                    game.clickpower -= 5;
+                    game.clickpower -= 10;
                     dv = new Phaser.Point();
                     dv.x = p.position.x - b.position.x;
                     dv.y = p.position.y - b.position.y;
@@ -159,6 +163,8 @@ var balls = [];
 var longwall;
 function create() {
 
+    game.money = [0,0];
+    game.nextPointPrice = 200;
     game.clickpower = 100;
     game.pts = [0,0];
     game.lastBounce = 0;
@@ -206,14 +212,6 @@ function create() {
     game.canvas.style.setProperty("left",""+margin+"px");
     game.canvas.style.setProperty("top",""+margin+"px");
 
-    //game.input.onDown.add( function(s) {
-    //    var x = s.position.x;
-    //    var y = s.position.y;
-    //    if( game.input.keyboard.isDown( Phaser.KeyCode.ALT ) && y < game.height-32 ) {
-    //        toggleWall(x,y);
-    //    }
-    //})
-
     game.powergauge = (function() {
         var bmd = game.add.bitmapData(200, 25);
         bmd.ctx.beginPath();
@@ -226,12 +224,32 @@ function create() {
 
     makeSprite(0,game.height-32,game.width,32,'#008800');
 
+    //game.add.button( game.width/2 - 50, game.height-32, 'wall', function() { console.log("button press") } )
+
+    socket.on('money', function(clients) {
+        client = clientId ? clients.left : clients.right;
+        opponent = !clientId ? clients.left : clients.right;
+        game.money[0] = client.money;
+        game.money[1] = opponent.money;
+        console.log("you have " + client.money + " funds!");
+    });
+    socket.on('reset', function() {
+        balls.map( function(b,i) {
+            destroyBall(b);
+        });
+    });
     socket.on('spawnBall', function(msg) {
         makeBall(msg.x,msg.y,msg.vx,msg.vy,msg.id)
-    })
+    });
     
     socket.emit('ready');
 
+}
+
+function destroyBall(b) {
+    balls.splice( balls.indexOf(b), 1 );
+    b.body.onEndContact.removeAll();
+    b.destroy(true);
 }
 
 var socket = io();
@@ -241,18 +259,27 @@ socket.on('goal', function(data) {
     console.log("Scored against goal " + data.scoredon);
     if (data.scoredon == "left") {
         game.pts[1]++;
+        if ( game.pts[1] >= 5 ) {
+            console.log("right wins!");
+        }
     } else if (data.scoredon == "right") {
         game.pts[0]++;
+        if ( game.pts[0] >= 5 ) {
+            console.log("left wins!");
+        }
     } else {
         console.log( "uh...I dunno who scored that one." )
     }
-    balls.map( function(b,i) {
-        if ( b.ballid == data.ballid ) {
-            balls.splice( balls.indexOf(b), 1 );
-            b.body.onEndContact.removeAll();
-            b.destroy(true);
-        }
-    });
+});
+
+var clientId;
+
+socket.on('left', function(side) {
+    clientId = 0;
+});
+
+socket.on('right', function(side) {
+    clientId = 1;
 });
 
 socket.on('update',function(res) { 
