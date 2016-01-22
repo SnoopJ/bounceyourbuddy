@@ -8,3 +8,5 @@ Just a simple little soccer-like game where users click/tap to pull the ball tow
 
 ## Technical details
 The heart of Bounce Your Buddy is decoupling the physics from the client side.  A copy of the [p2.js](https://github.com/schteppe/p2.js) library runs on the server side and manages the physics authoritatively, sending physics update info to the clients over the established sockets and responding to requests to kick the ball.  The client-side physics engines do all the heavy lifting of interpolating between updates, but defer to the server-side engine whenever an update comes along.  Right now, the way this is integrated means the game is very intolerant of latency, but aggressive interpolation might be able to fix this.
+
+![](https://david-dm.org/snoopjedi/bounceyourbuddy.svg)
